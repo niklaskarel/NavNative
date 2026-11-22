@@ -1,0 +1,52 @@
+BasedOnStyle: LLVM
+Language: Cpp
+Standard: c++20
+AccessModifierOffset: -4
+IndentWidth: 4
+ContinuationIndentWidth: 4
+ConstructorInitializerIndentWidth: 4
+TabWidth: 4
+UseTab: ForContinuationAndIndentation
+NamespaceIndentation: All
+ColumnLimit: 128
+MaxEmptyLinesToKeep: 1
+SeparateDefinitionBlocks: Always
+BreakBeforeBraces: Custom
+BraceWrapping:
+  AfterCaseLabel: true
+  AfterClass: true
+  AfterControlStatement: Always
+  AfterEnum: true
+  AfterExternBlock: true
+  AfterFunction: true
+  AfterNamespace: true
+  AfterStruct: true
+  AfterUnion: true
+  BeforeCatch: true
+  BeforeElse: true
+BreakConstructorInitializers: BeforeComma
+BreakStringLiterals: false
+BinPackArguments: false
+BinPackParameters: false
+AllowAllParametersOfDeclarationOnNextLine: false
+DerivePointerAlignment: false
+PointerAlignment: Left
+AllowShortBlocksOnASingleLine: Never
+AllowShortFunctionsOnASingleLine: None
+AllowShortIfStatementsOnASingleLine: Never
+AllowShortLoopsOnASingleLine: false
+FixNamespaceComments: false
+IncludeBlocks: Regroup
+IncludeCategories:
+  - Regex: '^"'
+    Priority: 1
+  - Regex: '^<(Q[A-Z]|Qt)'
+    Priority: 2
+  - Regex: '^<gtest/'
+    Priority: 3
+  - Regex: '.*'
+    Priority: 4
+IndentPPDirectives: AfterHash
+IndentWrappedFunctionNames: true
+ReflowComments: false
+SpacesBeforeTrailingComments: 4

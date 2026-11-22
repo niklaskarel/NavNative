@@ -1,0 +1,7 @@
+project: NavNative Lab
+baseline:
+  summary: Route tracking from simulated GPS readings in a C++20 and Qt 6 desktop app.
+  components:
+    NAVCore: Nearest-segment matching, route progress, and off-route detection.
+    NAVViewer: City map, simulated GPS, tracker visualization, and CSV recording.
+    NAVTests: GoogleTest coverage for route geometry and tracking.

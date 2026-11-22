@@ -1,0 +1,49 @@
+{
+  "version": 3,
+  "configurePresets": [
+    {
+      "name": "ninja-qt",
+      "displayName": "Ninja / Qt (compiler from environment)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/ninja-qt",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    },
+    {
+      "name": "vs-qt",
+      "displayName": "Visual Studio 2022 / Qt",
+      "generator": "Visual Studio 17 2022",
+      "architecture": "x64",
+      "binaryDir": "${sourceDir}/build/vs-qt"
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "ninja-qt",
+      "configurePreset": "ninja-qt"
+    },
+    {
+      "name": "vs-qt",
+      "configurePreset": "vs-qt",
+      "configuration": "Debug"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "ninja-qt",
+      "configurePreset": "ninja-qt",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "vs-qt",
+      "configurePreset": "vs-qt",
+      "configuration": "Debug",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}
