@@ -1,20 +1,14 @@
 #pragma once
 
-#include "nav/RouteTracker.h"
+#include "nav/Geometry/NavigationTypes.h"
 
 #include <optional>
 
-namespace nav
+namespace nav::geometry
 {
-	/// The closest point and its distance along a segment from the start.
-	struct SegmentProjection
-	{
-		Point position;
-		double distanceFromStart;
-	};
-
+	/// Computes the straight-line distance in meters between two local points.
 	double distance(Point a, Point b);
 
 	/// Projects onto a finite segment in local meters. A zero-length segment yields no result.
 	std::optional<SegmentProjection> projectOntoSegment(Point observation, Point start, Point end);
-}    // namespace nav
+}    // namespace nav::geometry

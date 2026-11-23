@@ -5,3 +5,24 @@ baseline:
     NAVCore: Nearest-segment matching, route progress, and off-route detection.
     NAVViewer: City map, simulated GPS, tracker visualization, and CSV recording.
     NAVTests: GoogleTest coverage for route geometry and tracking.
+progress:
+  - date: "2026-11-24"
+    summary: Added routing and threaded GPS tracking on an offline street map.
+    changes:
+      - Replaced the synthetic city and building sprites with an offline OpenStreetMap extract of Barcelona's Eixample district.
+      - Added local coordinate projection, a directed street graph that respects one-way roads, and A* and Yen's algorithm for up to two distinct routes ranked by distance.
+      - Added a simulated GNSS receiver that produces timestamped NMEA RMC messages at a nominal 10 Hz. A separate tracking worker validates, decodes, and matches fixes received through a bounded queue.
+      - Added session state and asynchronous route planning, pause, and stop. Pause preserves queued fixes, and stop discards them and joins both drive workers.
+      - Added continuity-aware route matching, a binary search to narrow the segment scan, and full-route reacquisition after a gap.
+      - Added a Qt Designer form, endpoint and route selection, one-way arrows, simulation controls, GPS and match overlays, and progress and deviation displays.
+      - Added asynchronous severity-based logging, throttled true-position messages, and expanded CSV recording with true and estimated progress and off-route status.
+      - Organized geometry, routing, GNSS, tracking, simulation, session, and logging in separate source and header folders within one NAVCore library. NAVViewer and NAVTests remain separate executables.
+      - Wired the bundled map, pugixml, and threading dependencies into CMake and expanded GoogleTest coverage for routing, tracking, NMEA, session and queue lifecycle, and logging.
+      - Rewrote the README around one generic CMake build workflow, usage, and architecture. Documented the apply_patch editing rule in AGENTS.md.
+    verification:
+      - The Windows MSVC build and CTest passed. The generated Visual Studio solution showed module folders inside NAVCore.
+    pending:
+      - Verify Linux builds and viewer behavior.
+      - Measure and improve route matching using controlled GPS inputs.
+      - Decode OpenLR traffic incidents and compare routes using travel-time costs.
+      - Simulate multiple vehicles with independent tracking state.

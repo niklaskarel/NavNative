@@ -1,0 +1,225 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+  <class>ViewerWindow</class>
+  <widget class="QWidget" name="ViewerWindow">
+    <property name="geometry">
+      <rect>
+        <x>0</x>
+        <y>0</y>
+        <width>1080</width>
+        <height>780</height>
+      </rect>
+    </property>
+    <property name="windowTitle">
+      <string>NavNative Lab</string>
+    </property>
+    <layout class="QVBoxLayout" name="mainLayout" stretch="0,0,0,1,0,0,0,0">
+      <item>
+        <layout class="QHBoxLayout" name="headerLayout">
+          <item>
+            <widget class="QLabel" name="title">
+              <property name="text">
+                <string>Eixample, Barcelona</string>
+              </property>
+              <property name="font">
+                <font>
+                  <pointsize>16</pointsize>
+                  <bold>true</bold>
+                </font>
+              </property>
+            </widget>
+          </item>
+          <item>
+            <spacer name="headerSpacer">
+              <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+              </property>
+            </spacer>
+          </item>
+          <item>
+            <widget class="QLabel" name="stateLabel" />
+          </item>
+          <item>
+            <widget class="QPushButton" name="help">
+              <property name="text">
+                <string>Help</string>
+              </property>
+            </widget>
+          </item>
+        </layout>
+      </item>
+      <item>
+        <layout class="QHBoxLayout" name="routeControls" stretch="0,0,1">
+          <item>
+            <widget class="QPushButton" name="setPoints">
+              <property name="text">
+                <string>Set Start / Destination</string>
+              </property>
+              <property name="checkable">
+                <bool>true</bool>
+              </property>
+              <property name="styleSheet">
+                <string>QPushButton:checked { background-color: #245b94; color: white; }</string>
+              </property>
+            </widget>
+          </item>
+          <item>
+            <widget class="QPushButton" name="cancel">
+              <property name="text">
+                <string>Cancel</string>
+              </property>
+            </widget>
+          </item>
+          <item>
+            <widget class="QComboBox" name="routeOptions">
+              <property name="accessibleName">
+                <string>Route alternatives</string>
+              </property>
+              <property name="minimumContentsLength">
+                <number>18</number>
+              </property>
+              <property name="placeholderText">
+                <string>Route alternatives</string>
+              </property>
+            </widget>
+          </item>
+        </layout>
+      </item>
+      <item>
+        <widget class="QLabel" name="routeStatus" />
+      </item>
+      <item>
+        <layout class="QVBoxLayout" name="mapLayout" />
+      </item>
+      <item>
+        <layout class="QHBoxLayout" name="driveControls" stretch="0,0,0,0,0,0,1,0,1,0">
+          <item>
+            <widget class="QPushButton" name="start">
+              <property name="text">
+                <string>Start</string>
+              </property>
+            </widget>
+          </item>
+          <item>
+            <widget class="QPushButton" name="pause">
+              <property name="text">
+                <string>Pause</string>
+              </property>
+            </widget>
+          </item>
+          <item>
+            <widget class="QPushButton" name="stop">
+              <property name="text">
+                <string>Stop</string>
+              </property>
+            </widget>
+          </item>
+          <item>
+            <widget class="QPushButton" name="reset">
+              <property name="text">
+                <string>Reset</string>
+              </property>
+            </widget>
+          </item>
+          <item>
+            <widget class="QPushButton" name="recordButton">
+              <property name="text">
+                <string>Record CSV</string>
+              </property>
+            </widget>
+          </item>
+          <item>
+            <widget class="QLabel" name="speedLabel">
+              <property name="text">
+                <string>Speed: 12 m/s</string>
+              </property>
+            </widget>
+          </item>
+          <item>
+            <widget class="QSlider" name="speed">
+              <property name="accessibleName">
+                <string>Vehicle speed in meters per second</string>
+              </property>
+              <property name="maximum">
+                <number>30</number>
+              </property>
+              <property name="value">
+                <number>12</number>
+              </property>
+              <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+              </property>
+            </widget>
+          </item>
+          <item>
+            <widget class="QLabel" name="noiseLabel">
+              <property name="text">
+                <string>GPS noise: 8 m</string>
+              </property>
+            </widget>
+          </item>
+          <item>
+            <widget class="QSlider" name="noise">
+              <property name="accessibleName">
+                <string>GPS noise in meters</string>
+              </property>
+              <property name="maximum">
+                <number>30</number>
+              </property>
+              <property name="value">
+                <number>8</number>
+              </property>
+              <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+              </property>
+            </widget>
+          </item>
+          <item>
+            <widget class="QCheckBox" name="offset">
+              <property name="text">
+                <string>60 m GPS offset</string>
+              </property>
+            </widget>
+          </item>
+        </layout>
+      </item>
+      <item>
+        <widget class="QLabel" name="status" />
+      </item>
+      <item>
+        <widget class="QPlainTextEdit" name="logView">
+          <property name="maximumSize">
+            <size>
+              <width>16777215</width>
+              <height>110</height>
+            </size>
+          </property>
+          <property name="accessibleName">
+            <string>Application log</string>
+          </property>
+          <property name="readOnly">
+            <bool>true</bool>
+          </property>
+          <property name="maximumBlockCount">
+            <number>512</number>
+          </property>
+          <property name="placeholderText">
+            <string>Application log</string>
+          </property>
+        </widget>
+      </item>
+      <item>
+        <widget class="QLabel" name="attribution">
+          <property name="text">
+            <string>Map data &amp;copy; &lt;a href="https://www.openstreetmap.org/copyright"&gt;OpenStreetMap contributors&lt;/a&gt;</string>
+          </property>
+          <property name="openExternalLinks">
+            <bool>true</bool>
+          </property>
+        </widget>
+      </item>
+    </layout>
+  </widget>
+  <resources />
+  <connections />
+</ui>

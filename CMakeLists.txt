@@ -4,28 +4,77 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 option(NAV_BUILD_GUI "Build Qt route visualizer" ON)
-set(NAVCore_sources
-  src/RouteGeometry.cpp
-  src/RouteTracker.cpp
+find_package(Threads REQUIRED)
+
+set(core_sources
+  src/Geometry/RouteGeometry.cpp
+  src/Routing/LocalProjection.cpp
+  src/Routing/OpenStreetMap.cpp
+  src/Routing/RoadGraph.cpp
+  src/Routing/RoutePlanner.cpp
+  src/Gnss/NmeaRmc.cpp
+  src/Tracking/RouteTracker.cpp
+  src/Simulation/DriveSimulation.cpp
+  src/Simulation/SimulatedGnssSource.cpp
+  src/Session/RouteSession.cpp
+  src/Session/TrackingWorker.cpp
+  src/Logger/CsvRecorder.cpp
+  src/Logger/Log.cpp
+  src/Logger/PositionLogger.cpp
 )
-set(NAVCore_headers
-  include/nav/RouteTracker.h
-  include/nav/RouteGeometry.h
+set(core_headers
+  include/nav/Geometry/RouteGeometry.h
+  include/nav/Geometry/NavigationTypes.h
+  include/nav/Routing/LocalProjection.h
+  include/nav/Routing/OpenStreetMap.h
+  include/nav/Routing/RoadGraph.h
+  include/nav/Routing/RoutePlanner.h
+  include/nav/Gnss/NmeaRmc.h
+  include/nav/Tracking/RouteTracker.h
+  include/nav/Simulation/DriveSimulation.h
+  include/nav/Simulation/SimulatedGnssSource.h
+  include/nav/Session/RouteSession.h
+  include/nav/Session/TrackingWorker.h
+  include/nav/Session/ProtectedQueue.h
+  include/nav/Logger/CsvRecorder.h
+  include/nav/Logger/Log.h
+  include/nav/Logger/PositionLogger.h
 )
-add_library(NAVCore ${NAVCore_sources} ${NAVCore_headers})
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "Source Files" FILES ${NAVCore_sources})
-source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}" PREFIX "Header Files" FILES ${NAVCore_headers})
+add_library(NAVCore STATIC ${core_sources} ${core_headers})
 target_include_directories(NAVCore PUBLIC include)
+target_link_libraries(NAVCore PRIVATE Threads::Threads)
 if(MSVC)
   target_compile_options(NAVCore PRIVATE /W4)
 else()
   target_compile_options(NAVCore PRIVATE -Wall -Wextra -Wpedantic)
 endif()
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/src" PREFIX "Source Files" FILES ${core_sources})
+source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/include/nav" PREFIX "Header Files" FILES ${core_headers})
+
+find_package(pugixml 1.16 CONFIG QUIET)
+if(TARGET pugixml::pugixml)
+  target_link_libraries(NAVCore PRIVATE pugixml::pugixml)
+else()
+  include(FetchContent)
+  if(POLICY CMP0135)
+    cmake_policy(SET CMP0135 NEW)
+  endif()
+  FetchContent_Declare(pugixml
+    URL https://codeload.github.com/zeux/pugixml/tar.gz/refs/tags/v1.16
+    URL_HASH SHA256=357bcab8877dc9943f355d3a72daba1b053238ba955f50fa81586afb65090219
+    SOURCE_SUBDIR src
+  )
+  FetchContent_MakeAvailable(pugixml)
+  target_sources(NAVCore PRIVATE "${pugixml_SOURCE_DIR}/src/pugixml.cpp")
+  target_include_directories(NAVCore SYSTEM PRIVATE "${pugixml_SOURCE_DIR}/src")
+  source_group("pugixml" FILES "${pugixml_SOURCE_DIR}/src/pugixml.cpp")
+endif()
+
 option(BUILD_TESTING "Build the navigation geometry tests" ON)
 if(BUILD_TESTING)
   enable_testing()
-  add_executable(NAVTests tests/TrackerTest.cpp)
-  target_link_libraries(NAVTests PRIVATE NAVCore)
+  add_executable(NAVTests tests/TrackerTest.cpp tests/NavigationInputTest.cpp tests/RouteSessionTest.cpp tests/PositionLoggerTest.cpp)
+  target_link_libraries(NAVTests PRIVATE NAVCore Threads::Threads)
   find_package(GTest CONFIG QUIET)
   if(TARGET GTest::gtest_main)
     target_link_libraries(NAVTests PRIVATE GTest::gtest_main)
@@ -46,8 +95,6 @@ if(BUILD_TESTING)
     target_sources(NAVTests PRIVATE ${gtest_sources})
     source_group("GoogleTest" FILES ${gtest_sources})
     target_include_directories(NAVTests SYSTEM PRIVATE "${gtest_dir}" "${gtest_dir}/include")
-    find_package(Threads REQUIRED)
-    target_link_libraries(NAVTests PRIVATE Threads::Threads)
   endif()
   add_test(NAME navigation_geometry COMMAND NAVTests)
 endif()
@@ -55,29 +102,22 @@ set(viewer_sources
   app/main.cpp
   app/ViewerWindow.cpp
   app/MapCanvas.cpp
-  app/CityRenderer.cpp
-  app/DriveSimulation.cpp
-  app/CsvRecorder.cpp
 )
 set(viewer_headers
   app/ViewerWindow.h
   app/MapCanvas.h
-  app/CityMap.h
-  app/CityRenderer.h
-  app/DriveSimulation.h
-  app/CsvRecorder.h
 )
 if(NAV_BUILD_GUI)
   find_package(Qt6 6.5 REQUIRED COMPONENTS Widgets)
-  qt_add_executable(NAVViewer ${viewer_sources} ${viewer_headers})
+  set(viewer_form app/ViewerWindow.ui)
+  add_executable(NAVViewer ${viewer_sources} ${viewer_headers} ${viewer_form})
+  set_target_properties(NAVViewer PROPERTIES AUTOMOC ON AUTOUIC ON)
   source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/app" PREFIX "Source Files" FILES ${viewer_sources})
   source_group(TREE "${CMAKE_CURRENT_SOURCE_DIR}/app" PREFIX "Header Files" FILES ${viewer_headers})
-  qt_add_resources(NAVViewer map_assets
-    PREFIX "/map"
-    FILES
-      app/assets/BuildingBlue.png
-      app/assets/BuildingGreen.png
-      app/assets/BuildingRed.png
+  source_group("Forms" FILES ${viewer_form})
+  file(GENERATE
+    OUTPUT "$<TARGET_FILE_DIR:NAVViewer>/Eixample.osm"
+    INPUT "${CMAKE_CURRENT_SOURCE_DIR}/app/assets/Eixample.osm"
   )
   target_link_libraries(NAVViewer PRIVATE NAVCore Qt6::Widgets)
   if(WIN32)
