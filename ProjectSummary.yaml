@@ -26,3 +26,15 @@ progress:
       - Measure and improve route matching using controlled GPS inputs.
       - Decode OpenLR traffic incidents and compare routes using travel-time costs.
       - Simulate multiple vehicles with independent tracking state.
+  - date: "2026-11-25"
+    summary: Added ordered waypoint routing and background CSV recording.
+    changes:
+      - Store snapped waypoint IDs and positions in click order. Enter confirms the selection, and right-click clears all stops and route choices during selection or preview.
+      - Plan through every selected stop by joining consecutive route legs. Offer a complete alternate when a leg has an alternate.
+      - Define one shared NodeId for the road graph, planner, and session. Group the shared types under one outer nav namespace in NavigationTypes.h.
+      - Open, format, write, flush, and close CSV recordings on a background thread. Stop drains queued rows and reports completion or failure through a queued Qt signal.
+      - Update the README controls, architecture diagram, and TODOs for waypoint routing, CSV recording, and pending timestamps.
+    verification:
+      - The Windows Debug build and CTest passed.
+      - The waypoint test verified explicit confirmation, routing through an intermediate stop, and clearing during selection and preview.
+      - The CSV smoke test verified background completion, recovery after an invalid path, and writing all 12 queued rows in order.

@@ -5,6 +5,7 @@
 #include <queue>
 
 #include <algorithm>
+#include <iterator>
 #include <tuple>
 
 namespace nav::routing
@@ -36,7 +37,8 @@ namespace nav::routing
 	}
 
 	// Finds the best route and the shortest distinct alternative for the viewer.
-	std::vector<RouteOption> RoutePlanner::routeOptions(NodeId start, NodeId destination, std::stop_token stop) const
+	std::vector<RouteOption>
+		RoutePlanner::routeOptions(nav::routing::NodeId start, nav::routing::NodeId destination, std::stop_token stop) const
 	{
 		auto best = search(start, destination, {}, {}, stop);
 		auto bestGeometry = geometry(best.nodes);
@@ -78,16 +80,66 @@ namespace nav::routing
 		return results;
 	}
 
+	std::vector<RouteOption> RoutePlanner::routeOptions(std::span<const NodeId> stops, std::stop_token stop) const
+	{
+		if (stops.size() < 2 || stop.stop_requested())
+			return {};
+		if (stops.size() == 2)
+			return routeOptions(stops.front(), stops.back(), stop);
+
+		std::vector<std::vector<RouteOption>> legs;
+		legs.reserve(stops.size() - 1);
+		std::optional<std::size_t> alternateLeg;
+		double smallestExtra = 0.0;
+		for (std::size_t i = 1; i < stops.size(); ++i)
+		{
+			auto choices = routeOptions(stops[i - 1], stops[i], stop);
+			if (choices.empty() || stop.stop_requested())
+				return {};
+
+			if (choices.size() == 2)
+			{
+				const double extra = choices[1].meters - choices[0].meters;
+				if (!alternateLeg || extra < smallestExtra)
+				{
+					smallestExtra = extra;
+					alternateLeg = legs.size();
+				}
+			}
+			legs.push_back(std::move(choices));
+		}
+
+		const auto assemble = [&legs](std::optional<std::size_t> useAlternate) {
+			geometry::Route points;
+			double meters = 0.0;
+			for (std::size_t i = 0; i < legs.size(); ++i)
+			{
+				const auto& leg = legs[i][useAlternate == i ? 1 : 0];
+				const auto first = points.empty() ? leg.points->begin() : std::next(leg.points->begin());
+				points.insert(points.end(), first, leg.points->end());
+				meters += leg.meters;
+			}
+			return RouteOption{std::make_shared<const geometry::Route>(std::move(points)), meters};
+		};
+
+		std::vector<RouteOption> results{assemble(std::nullopt)};
+		if (alternateLeg)
+			results.push_back(assemble(alternateLeg));
+		if (stop.stop_requested())
+			return {};
+		return results;
+	}
+
 	// Runs A* while honoring excluded nodes, an excluded edge, and cancellation.
-	RoutePlanner::Path RoutePlanner::search(NodeId start,
-											NodeId destination,
+	RoutePlanner::Path RoutePlanner::search(nav::routing::NodeId start,
+											nav::routing::NodeId destination,
 											const std::unordered_set<NodeId>& excluded,
 											std::optional<std::pair<NodeId, NodeId>> excludedEdge,
 											std::stop_token stop) const
 	{
 		struct Candidate
 		{
-			NodeId id;          // Graph node represented by this queued A* candidate.
+			nav::routing::NodeId id;    // Graph node represented by this queued A* candidate.
 			double used;        // Distance already traveled from the start to this candidate.
 			double estimate;    // Estimated total route distance used to prioritize candidates.
 
@@ -99,8 +151,8 @@ namespace nav::routing
 		};
 
 		std::priority_queue<Candidate, std::vector<Candidate>, std::greater<>> open;
-		std::unordered_map<NodeId, double> costs{{start, 0}};
-		std::unordered_map<NodeId, NodeId> previous;
+		std::unordered_map<nav::routing::NodeId, double> costs{{start, 0}};
+		std::unordered_map<nav::routing::NodeId, nav::routing::NodeId> previous;
 		const auto finish = m_graph.position(destination);
 		open.push({start, 0, nav::geometry::distance(m_graph.position(start), finish)});
 		while (!open.empty() && !stop.stop_requested())

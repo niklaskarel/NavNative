@@ -1,31 +1,50 @@
 #pragma once
 
-#include <chrono>
-#include <filesystem>
-#include <fstream>
+#include "nav/Geometry/NavigationTypes.h"
 
-namespace nav::session
-{
-	struct DriveFrame;
-}
+#include <chrono>
+#include <condition_variable>
+#include <deque>
+#include <filesystem>
+#include <functional>
+#include <mutex>
+#include <thread>
 
 namespace nav::logger
 {
-	/// Writes viewer frames to a CSV file while recording is active.
+	/// Sends drive frames to a background CSV writer.
 	class CsvRecorder
 	{
 	public:
-		/// Opens the selected CSV and writes the header used by frame exports.
-		bool start(const std::filesystem::path& path);
-		/// Closes the recording file when the viewer stops CSV capture.
+		/// Called on the writer thread after the file has been closed.
+		using Completion = std::function<void(bool success)>;
+
+		~CsvRecorder();
+
+		/// Requests a recording and transfers ownership of the path and callback.
+		bool start(std::filesystem::path path, Completion completed);
+		/// Queues a copy of a frame while the recorder accepts frames.
+		void append(const nav::session::DriveFrame& frame);
+		/// Stops accepting frames and lets the writer drain the queue.
 		void stop();
-		/// Writes one drive frame with its elapsed recording time to the CSV file.
-		bool append(const nav::session::DriveFrame& frame);
-		/// Tells the viewer whether a CSV file is open.
-		bool isRecording() const;
+		/// Joins the writer after completion or during destruction.
+		void join();
 
 	private:
-		std::ofstream m_file;                                 // Open stream for the current CSV recording.
-		std::chrono::steady_clock::time_point m_startedAt;    // Monotonic time origin for the elapsed column in the CSV.
+		struct Row
+		{
+			std::chrono::milliseconds elapsed;
+			nav::session::DriveFrame frame;
+		};
+
+		bool writeFile(const std::filesystem::path& path);
+
+		std::mutex m_mutex;
+		std::condition_variable m_changed;
+		std::deque<Row> m_rows;
+		std::chrono::steady_clock::time_point m_startedAt;
+		bool m_accepting = false;
+		bool m_failed = false;
+		std::jthread m_thread;
 	};
 }    // namespace nav::logger

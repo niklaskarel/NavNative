@@ -96,11 +96,10 @@ namespace nav::viewer
 		update();
 	}
 
-	// Updates the start and destination markers shown during route setup.
-	void MapCanvas::setEndpoints(std::optional<nav::geometry::Point> start, std::optional<nav::geometry::Point> destination)
+	void MapCanvas::setWaypoints(const std::vector<nav::geometry::Point>& positions, bool confirmed)
 	{
-		m_startMarker = start;
-		m_destinationMarker = destination;
+		m_waypointMarkers = positions;
+		m_waypointsConfirmed = confirmed;
 		update();
 	}
 
@@ -286,15 +285,11 @@ namespace nav::viewer
 		p.strokePath(m_directionOverlay, QPen(QColor("#f1e6c3"), ArrowWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
 
 		p.setPen(Qt::NoPen);
-		if (m_destinationMarker)
+		for (std::size_t i = 0; i < m_waypointMarkers.size(); ++i)
 		{
-			p.setBrush(QColor("#d58df1"));
-			p.drawEllipse(screen(*m_destinationMarker), MarkerRadius, MarkerRadius);
-		}
-		if (m_startMarker)
-		{
-			p.setBrush(QColor("#e5e7eb"));
-			p.drawEllipse(screen(*m_startMarker), MarkerRadius, MarkerRadius);
+			const bool destination = m_waypointsConfirmed && i + 1 == m_waypointMarkers.size();
+			p.setBrush(QColor(destination ? "#d58df1" : (i == 0 ? "#e5e7eb" : "#7dd3fc")));
+			p.drawEllipse(screen(m_waypointMarkers[i]), MarkerRadius, MarkerRadius);
 		}
 		p.setBrush(Qt::NoBrush);
 		p.setPen(QPen(QColor("#fbbf24"), ObservationPenWidth));

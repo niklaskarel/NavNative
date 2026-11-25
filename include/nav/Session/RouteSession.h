@@ -44,8 +44,10 @@ namespace nav::session
 		bool beginSetting();
 		/// Discards partial endpoint selection and returns to the initial state.
 		bool cancelSetting();
-		/// Snaps a click to the road graph and starts planning after both endpoints are selected.
-		bool pickPoint(nav::geometry::Point point, PlanHandler completed);
+		/// Appends a snapped waypoint without starting a search.
+		bool pickPoint(nav::geometry::Point point);
+		/// Plans through the selected waypoints in click order.
+		bool finishWaypoints(PlanHandler completed);
 		/// Clears both endpoints and route alternatives while keeping point selection active.
 		bool clearEndpoints();
 		// Deliver this on the owning thread after the asynchronous planner posts its result.
@@ -81,10 +83,8 @@ namespace nav::session
 		const std::vector<nav::routing::RouteOption>& options() const;
 		/// Returns the index of the candidate highlighted in the viewer.
 		std::size_t selectedRoute() const;
-		/// Returns the selected start coordinates for the map marker.
-		std::optional<nav::geometry::Point> startPoint() const;
-		/// Returns the selected destination coordinates for the map marker.
-		std::optional<nav::geometry::Point> destinationPoint() const;
+		/// Returns the selected waypoints in click order.
+		const nav::routing::Waypoint& waypoints() const;
 
 	private:
 		/// Changes the session state and notifies the registered UI callback.
@@ -100,8 +100,7 @@ namespace nav::session
 		const nav::geometry::Point m_originDegrees;    // Map origin used by both acquisition and tracking projections.
 		State m_state = State::NotStarted;             // Current lifecycle stage used to gate session commands.
 		StateHandler m_stateChanged;                   // Callback that updates the viewer when the lifecycle stage changes.
-		std::optional<nav::routing::RoadGraph::NodeId> m_start;          // Start node selected during route setup.
-		std::optional<nav::routing::RoadGraph::NodeId> m_destination;    // Destination node selected during route setup.
+		nav::routing::Waypoint m_waypoints;    // Snapped stops in click order.
 		std::vector<nav::routing::RouteOption> m_options;                // Planned route alternatives available to the viewer.
 		std::size_t m_selected = 0;                 // Index of the candidate used for preview and drive startup.
 		int m_speed = 12;                           // Selected speed retained across drives and forwarded to acquisition.

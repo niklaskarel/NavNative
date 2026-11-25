@@ -11,22 +11,21 @@ namespace nav::routing
 	class RoadGraph
 	{
 	public:
-		using NodeId = std::int64_t;
 		/// Builds directed edges from shared OSM nodes and street direction tags.
 		explicit RoadGraph(const StreetMap& map);
 		/// Finds the graph node closest to a point picked in the viewer.
 		NodeId nearestNode(nav::geometry::Point point) const;
 		/// Returns a node's local coordinates for A* and route drawing.
-		nav::geometry::Point position(NodeId id) const;
+		nav::geometry::Point position(nav::routing::NodeId id) const;
 
 		struct Edge
 		{
-			NodeId destination;    // Node reached when the planner traverses this directed edge.
+			nav::routing::NodeId destination;    // Node reached when the planner traverses this directed edge.
 			double meters;         // Cost in meters of traversing the edge.
 		};
 
 		/// Exposes the outgoing edges that the planner can traverse.
-		std::span<const Edge> edges(NodeId id) const;
+		std::span<const Edge> edges(nav::routing::NodeId id) const;
 
 	private:
 		struct Node
@@ -35,6 +34,6 @@ namespace nav::routing
 			std::vector<Edge> edges;          // Outgoing directed edges considered during search.
 		};
 
-		std::unordered_map<NodeId, Node> m_nodes;    // Graph nodes and adjacency lists indexed by OSM node ID.
+		std::unordered_map<nav::routing::NodeId, Node> m_nodes;    // Graph nodes and adjacency lists indexed by OSM node ID.
 	};
 }    // namespace nav::routing

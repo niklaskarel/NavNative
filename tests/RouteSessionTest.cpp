@@ -38,32 +38,50 @@ TEST(RoutePlannerTest, ReturnsTwoShortestDistinctOptions)
 	EXPECT_EQ(planner.routeOptions(1, 2).size(), 1);
 }
 
-// Verifies clearing endpoint markers also empties the route choices before picking again.
-TEST(RouteSessionTest, ClearsBothEndpointsAndRouteChoices)
+// Verifies explicit submission, required intermediate stops, and clearing before and after planning.
+TEST(RouteSessionTest, PlansThroughSelectedWaypointsAndClearsThem)
 {
 	std::promise<nav::session::RouteSession::PlanResult> initial;
 	auto plan = initial.get_future();
 	nav::session::RouteSession session(sampleMap());
 
 	ASSERT_TRUE(session.beginSetting());
-	ASSERT_TRUE(session.pickPoint({0, 0}, {}));
-	ASSERT_TRUE(session.pickPoint({20, 0}, [&](auto result) { initial.set_value(std::move(result)); }));
+	const auto completed = [&](auto result) { initial.set_value(std::move(result)); };
+	ASSERT_TRUE(session.pickPoint({0, 0}));
+	EXPECT_FALSE(session.finishWaypoints(completed));
+	EXPECT_FALSE(session.pickPoint({0, 0}));
+	ASSERT_TRUE(session.pickPoint({10, 10}));
+	ASSERT_TRUE(session.pickPoint({20, 0}));
+	EXPECT_EQ(session.state(), State::SettingRoute);
+	EXPECT_EQ(session.waypoints().nodeIds, (std::vector<nav::routing::NodeId>{1, 4, 3}));
+	ASSERT_EQ(session.waypoints().positions.size(), 3);
+	EXPECT_DOUBLE_EQ(session.waypoints().positions[1].y, 10);
+	ASSERT_TRUE(session.finishWaypoints(completed));
+	EXPECT_EQ(session.state(), State::Calculating);
+	EXPECT_FALSE(session.clearEndpoints());
 	ASSERT_EQ(plan.wait_for(2s), std::future_status::ready);
 	session.finishCalculation(plan.get());
 	ASSERT_EQ(session.state(), State::ChoosingRoute);
 	ASSERT_FALSE(session.options().empty());
+	const auto& route = *session.options().front().points;
+	ASSERT_EQ(route.size(), 3);
+	EXPECT_DOUBLE_EQ(route[1].y, 10);
 
 	ASSERT_TRUE(session.clearEndpoints());
 	EXPECT_EQ(session.state(), State::SettingRoute);
-	EXPECT_FALSE(session.startPoint());
-	EXPECT_FALSE(session.destinationPoint());
+	EXPECT_TRUE(session.waypoints().nodeIds.empty());
+	EXPECT_TRUE(session.waypoints().positions.empty());
 	EXPECT_TRUE(session.options().empty());
 	EXPECT_EQ(session.selectedRoute(), 0);
 	EXPECT_FALSE(session.start([](nav::session::DriveFrame) {}));
 
-	ASSERT_TRUE(session.pickPoint({10, 0}, {}));
+	ASSERT_TRUE(session.pickPoint({0, 0}));
+	ASSERT_TRUE(session.pickPoint({10, 0}));
+	ASSERT_TRUE(session.pickPoint({0, 0}));
+	ASSERT_EQ(session.waypoints().nodeIds.size(), 3);
 	ASSERT_TRUE(session.clearEndpoints());
-	EXPECT_FALSE(session.startPoint());
+	EXPECT_TRUE(session.waypoints().nodeIds.empty());
+	EXPECT_TRUE(session.waypoints().positions.empty());
 }
 
 // Verifies the drive lifecycle and delivery of the first simulated frame.
@@ -80,11 +98,12 @@ TEST(RouteSessionTest, RequiresSetupAndStopsBeforeAllowingNewRoute)
 	auto plan = promise.get_future();
 	// Delivers the planner result to the waiting test through its promise.
 	auto completed = [&](nav::session::RouteSession::PlanResult result) { promise.set_value(std::move(result)); };
-	EXPECT_FALSE(session.pickPoint({0, 0}, completed));
+	EXPECT_FALSE(session.pickPoint({0, 0}));
 	EXPECT_FALSE(session.start([](nav::session::DriveFrame) {}));
 	ASSERT_TRUE(session.beginSetting());
-	ASSERT_TRUE(session.pickPoint({0, 0}, completed));
-	ASSERT_TRUE(session.pickPoint({20, 0}, completed));
+	ASSERT_TRUE(session.pickPoint({0, 0}));
+	ASSERT_TRUE(session.pickPoint({20, 0}));
+	ASSERT_TRUE(session.finishWaypoints(completed));
 	EXPECT_EQ(session.state(), State::Calculating);
 	ASSERT_EQ(plan.wait_for(2s), std::future_status::ready);
 	session.finishCalculation(plan.get());
@@ -102,7 +121,7 @@ TEST(RouteSessionTest, RequiresSetupAndStopsBeforeAllowingNewRoute)
 	ASSERT_EQ(frame.wait_for(2s), std::future_status::ready);
 	EXPECT_DOUBLE_EQ(frame.get().progressMeters, 0);
 	EXPECT_FALSE(session.beginSetting());
-	EXPECT_FALSE(session.pickPoint({0, 0}, completed));
+	EXPECT_FALSE(session.pickPoint({0, 0}));
 	EXPECT_FALSE(session.selectRoute(0));
 	auto pauseCompleted = paused.get_future();
 	ASSERT_TRUE(session.requestPause([&paused] { paused.set_value(); }));

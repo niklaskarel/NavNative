@@ -22,11 +22,11 @@ To build the navigation libraries and tests without Qt, add `-DNAV_BUILD_GUI=OFF
 
 ## Run a simulation
 
-The viewer opens on a map of the Eixample district. Select **Set Start / Destination**, then click two points on the map. The clicks snap to street nodes. Before starting a drive, right-click the map to clear both endpoints and the route choices. The planner returns the two shortest distinct routes by distance when both exist. Select a route by clicking its line or using the dropdown, then press **Start**. The viewer's **Help** button explains these controls.
+The viewer opens on a map of the Eixample district. Select **Set Start / Destination**, then click at least two points in the order you want to visit them. The clicks snap to street nodes. Press **Enter** to plan a route through all the selected stops, from the first point to the last. Right-click the map while selecting stops or previewing routes to clear all markers and route choices. The planner offers the shortest route and an alternate when available. Select a route by clicking its line or using the dropdown, then press **Start**. The viewer's **Help** button explains these controls.
 
 Arrows show the allowed direction on one-way streets. During a drive, green marks the simulated vehicle, yellow marks the GPS reading, and blue marks the matched position. Adjust speed and GPS noise with the sliders. **Pause** preserves the current drive and queued messages. **Stop** ends the drive and clears the queue. **Reset** stops an active drive and clears the route and GPS trail so you can select new endpoints.
 
-**Record CSV** writes elapsed recording time, vehicle and GPS positions, the matched position, true and estimated progress, distance from the route, and the off-route flag. **Stop Recording** closes the file.
+**Record CSV** starts a background writer. The GUI queues frames with elapsed recording time, vehicle and GPS positions, the matched position, true and estimated progress, distance from the route, and the off-route flag. **Stop Recording** stops accepting frames and lets the writer finish queued rows before closing the file.
 
 The application log below the drive status shows information, warnings, and errors. A dedicated log thread writes every completed frame's true position to the terminal. The on-screen log receives the first true-position entry of each drive and then at most one every three seconds. The log thread prepares those entries and delivers them through a queued Qt signal. The UI thread inserts them into the widget.
 
@@ -39,7 +39,7 @@ flowchart TD
     Main["main.cpp"] -->|"Read map file"| Import["loadStreetMapFromOsmXml()"]
     Import -->|"Map"| Window["ViewerWindow"]
     Window -->|"Route setup and drive controls"| Session["RouteSession"]
-    Session -->|"Endpoints"| Planner["RoutePlanner<br/>Background calculation"]
+    Session -->|"Ordered waypoint IDs"| Planner["RoutePlanner<br/>Background calculation"]
     Graph["RoadGraph"] --> Planner
     Planner -->|"Up to two routes"| Session
     Session -->|"Selected route"| Simulation
@@ -60,9 +60,15 @@ flowchart TD
 
     subgraph Interface["UI thread"]
         Window -->|"Map and positions"| Canvas["MapCanvas"]
-        Window -->|"Frames while recording"| Recorder["CsvRecorder"]
         LogView["Application log widget"]
     end
+
+    Window -->|"Frames while recording"| CsvQueue["CSV frame queue"]
+    subgraph Recording["CSV writer thread"]
+        CsvQueue --> Recorder["CsvRecorder"]
+        Recorder -->|"Open, write, flush, and close"| CsvFile["CSV file"]
+    end
+    Recorder -->|"Completion or failure via queued Qt signal"| Window
 
     PositionLogger --> LogQueue["Log queue"]
     subgraph Logging["Log thread"]
@@ -74,7 +80,7 @@ flowchart TD
     Worker -->|"Completed frame via the UI event queue"| Window
 ```
 
-The session owns route setup and the drive lifecycle. The planner uses A* and Yen's second-path search on the directed street graph. The selected route is shared by the simulator, tracker, and canvas. An acquisition thread generates simulated NMEA RMC sentences at a nominal interval of 100 ms. A tracking thread dequeues, validates, projects, and matches each fix. On resume, the tracking thread processes the preserved queue before acquisition restarts. On stop, the session discards pending messages and joins both workers.
+The session owns route setup and the drive lifecycle. The planner uses A* and Yen's second-path search on the directed street graph for each leg between consecutive waypoints. The complete alternate uses the leg alternative that adds the least distance. The selected route is shared by the simulator, tracker, and canvas. An acquisition thread generates simulated NMEA RMC sentences at a nominal interval of 100 ms. A tracking thread dequeues, validates, projects, and matches each fix. On resume, the tracking thread processes the preserved queue before acquisition restarts. On stop, the session discards pending messages and joins both workers.
 
 | CMake target | Responsibility |
 | --- | --- |
@@ -94,6 +100,9 @@ tests/           GoogleTest cases
 
 ## TODO
 
+- [x] **Plan routes through intermediate waypoints.** Select stops in order, then press Enter to plan.
+- [x] **Move CSV recording off the UI thread.** Write and close recordings on a background thread.
+- [ ] **Add timestamps to logs and recordings.** Timestamp application log entries and preserve the original NMEA UTC measurement time in CSV.
 - [ ] **Implement waypoint bearings.** Compute the direction from the matched position to a point ahead on the route, measured clockwise from north, and show it in the map viewer.
 - [ ] **Implement dead reckoning.** Estimate position during short GNSS gaps using the last valid fix, speed, and course. Mark estimates in the viewer and compare them with simulator ground truth.
 - [ ] **Verify cross-platform builds.** Build and run the Qt-free navigation libraries and tests on Windows and Linux using CMake. Build and smoke-test the Qt viewer on both platforms, including bundled map loading and CSV export. Document the dependencies and build commands for each platform.

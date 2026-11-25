@@ -3,6 +3,7 @@
 #include "nav/Routing/RoadGraph.h"
 
 #include <optional>
+#include <span>
 #include <stop_token>
 #include <unordered_set>
 
@@ -15,14 +16,15 @@ namespace nav::routing
 		/// Binds route searches to the session's immutable road graph.
 		explicit RoutePlanner(const RoadGraph& graph);
 		/// Returns the points on the shortest path between two graph nodes.
-		nav::geometry::Route shortestRoute(RoadGraph::NodeId start, RoadGraph::NodeId destination) const;
+		nav::geometry::Route shortestRoute(nav::routing::NodeId start, nav::routing::NodeId destination) const;
 		/// Finds the best route and the shortest distinct alternative for the viewer.
 		std::vector<RouteOption>
-			routeOptions(RoadGraph::NodeId start, RoadGraph::NodeId destination, std::stop_token stop = {}) const;
+			routeOptions(nav::routing::NodeId start, nav::routing::NodeId destination, std::stop_token stop = {}) const;
+
+		/// Finds up to two routes that visit all selected stops in order.
+		std::vector<RouteOption> routeOptions(std::span<const NodeId> stops, std::stop_token stop = {}) const;
 
 	private:
-		using NodeId = RoadGraph::NodeId;
-
 		struct Path
 		{
 			std::vector<NodeId> nodes;    // Ordered graph nodes reconstructed by the path search.
@@ -30,8 +32,8 @@ namespace nav::routing
 		};
 
 		/// Runs A* while honoring excluded nodes, an excluded edge, and cancellation.
-		Path search(NodeId start,
-					NodeId destination,
+		Path search(nav::routing::NodeId start,
+					nav::routing::NodeId destination,
 					const std::unordered_set<NodeId>& excluded = {},
 					std::optional<std::pair<NodeId, NodeId>> excludedEdge = {},
 					std::stop_token stop = {}) const;

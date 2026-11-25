@@ -5,6 +5,7 @@
 #include "ui_ViewerWindow.h"
 
 #include <QCheckBox>
+#include <QCloseEvent>
 #include <QComboBox>
 #include <QCoreApplication>
 #include <QEvent>
@@ -13,6 +14,7 @@
 #include <QMessageBox>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QShortcut>
 #include <QSignalBlocker>
 #include <QSlider>
 #include <QTimer>
@@ -99,9 +101,13 @@ namespace nav::viewer
 		: m_session(map)
 		, m_ui(std::make_unique<Ui::ViewerWindow>())
 		, m_canvas(new MapCanvas(std::move(map)))
+		, m_finishWaypoints(new QShortcut(this))
 	{
 		m_ui->setupUi(this);
 		m_ui->mapLayout->addWidget(m_canvas);
+		m_finishWaypoints->setKeys({QKeySequence(Qt::Key_Return), QKeySequence(Qt::Key_Enter)});
+		m_finishWaypoints->setAutoRepeat(false);
+		connect(m_finishWaypoints, &QShortcut::activated, this, &ViewerWindow::finishWaypointSelection);
 
 		connect(this, &ViewerWindow::logEntryReady, this, [this](const QString& lightHtml, const QString& darkHtml) {
 			const bool darkBackground =
@@ -132,6 +138,8 @@ namespace nav::viewer
 		connect(m_ui->stop, &QPushButton::clicked, this, [this] { stopDrive(); });
 		connect(m_ui->reset, &QPushButton::clicked, this, &ViewerWindow::resetDrive);
 		connect(m_ui->recordButton, &QPushButton::clicked, this, &ViewerWindow::toggleRecording);
+		connect(this, &ViewerWindow::csvRecordingFinished,
+				this, &ViewerWindow::finishRecording, Qt::QueuedConnection);
 		connect(m_ui->noise, &QSlider::valueChanged, this, [this](int value) {
 			m_session.setNoise(value);
 			m_ui->noiseLabel->setText(QString("GPS noise: %1 m").arg(value));
@@ -153,8 +161,25 @@ namespace nav::viewer
 	// Stops the session before Qt destroys the viewer and its event targets.
 	ViewerWindow::~ViewerWindow()
 	{
+		m_recorder.stop();
+		m_recorder.join();
 		nav::logger::applicationLog().setDisplayHandler({});
 		m_session.shutdown();
+	}
+
+	void ViewerWindow::closeEvent(QCloseEvent* event)
+	{
+		if (m_recordingState == RecordingState::Idle)
+		{
+			QWidget::closeEvent(event);
+			return;
+		}
+
+		event->ignore();
+		m_closeAfterRecording = true;
+		m_recordingState = RecordingState::Finishing;
+		m_recorder.stop();
+		updateRecordingControls();
 	}
 
 	// Handles background route and drive events on the Qt GUI thread.
@@ -196,24 +221,24 @@ namespace nav::viewer
 		m_ui->setPoints->setChecked(setting);
 		m_ui->setPoints->setText(setting ? "Setting Start / Destination…" : "Set Start / Destination");
 		m_ui->cancel->setEnabled(setting);
+		m_finishWaypoints->setEnabled(setting);
 		m_ui->routeOptions->setEnabled(choosing);
 		m_ui->start->setEnabled(choosing && !m_session.options().empty());
 		m_ui->pause->setEnabled(driving);
 		m_ui->pause->setText(state == State::Paused ? "Resume" : "Pause");
 		m_ui->stop->setEnabled(driving);
 		m_ui->reset->setEnabled(driving || choosing || state == State::Stopped || state == State::SettingRoute);
-		m_ui->recordButton->setEnabled(driving || m_recorder.isRecording());
+		updateRecordingControls();
 		m_canvas->setCursor(state == State::SettingRoute ? Qt::CrossCursor : Qt::ArrowCursor);
 
 		QString notice;
 		switch (state)
 		{
 		case State::NotStarted:
-			notice = "Select Set Start / Destination, then click two points on the map.";
+			notice = "Select Set Start / Destination to begin picking waypoints.";
 			break;
 		case State::SettingRoute:
-			notice = m_session.startPoint() ? "Click the destination. Right-click the map to clear both points."
-											: "Click the start. Right-click the map to clear both points.";
+			notice = "Click at least two points on the map, then press Enter to plan the route.";
 			break;
 		case State::Calculating:
 			notice = "Calculating routes…";
@@ -265,7 +290,7 @@ namespace nav::viewer
 							options.size() < 2 ? nullptr : options[1].points,
 							m_session.selectedRoute(),
 							m_session.state() == State::ChoosingRoute);
-		m_canvas->setEndpoints(m_session.startPoint(), m_session.destinationPoint());
+		m_canvas->setWaypoints(m_session.waypoints().positions, m_session.state() != State::SettingRoute);
 	}
 
 	// Uses a map click to set an endpoint or choose a displayed alternative.
@@ -273,16 +298,21 @@ namespace nav::viewer
 	{
 		if (m_session.state() == State::SettingRoute)
 		{
-			m_session.pickPoint(point, [this](nav::session::RouteSession::PlanResult result) {
-				QCoreApplication::postEvent(this, new PlanEvent(std::move(result)));
-			});
-			updateControls();
+			if (m_session.pickPoint(point))
+				updateControls();
 		}
 		else if (m_session.state() == State::ChoosingRoute)
 		{
 			if (const auto index = m_canvas->routeAt(point))
 				m_ui->routeOptions->setCurrentIndex(static_cast<int>(*index));
 		}
+	}
+
+	void ViewerWindow::finishWaypointSelection()
+	{
+		m_session.finishWaypoints([this](nav::session::RouteSession::PlanResult result) {
+			QCoreApplication::postEvent(this, new PlanEvent(std::move(result)));
+		});
 	}
 
 	// Starts the selected route and posts worker frames to the GUI event queue.
@@ -328,8 +358,7 @@ namespace nav::viewer
 	{
 		const auto& match = frame.match;
 		m_canvas->setFrame(frame.truth, frame.gps, match);
-		if (m_recorder.isRecording() && !m_recorder.append(frame))
-			recordingFailed();
+		m_recorder.append(frame);
 		m_ui->status->setText(QString("True progress: %1 m | Estimated: %2 m | Remaining: %3 m | Distance to route: %4 m | %5")
 								  .arg(frame.progressMeters, 0, 'f', ProgressDecimalPlaces)
 								  .arg(match.progressMeters, 0, 'f', ProgressDecimalPlaces)
@@ -349,20 +378,23 @@ namespace nav::viewer
 		QMessageBox::information(
 			this,
 			"Plan and drive a route",
-			"1. Select Set Start / Destination, then click the start and destination on the map.\n"
-			"   Right-click the map to clear both endpoints and route choices.\n"
+			"1. Select Set Start / Destination and click at least two stops in order.\n"
+			"   Press Enter to plan. Right-click the map to clear all stops and route choices.\n"
 			"2. Compare the routes. Click a colored line or choose it from the route list.\n"
 			"3. Press Start to drive the selected route.\n\n"
 			"Pause keeps your place. Stop ends the drive. Reset clears the route so you can set new points.");
 	}
 
-	// Prompts for a CSV path or stops an existing recording.
 	void ViewerWindow::toggleRecording()
 	{
-		if (m_recorder.isRecording())
+		if (m_recordingState == RecordingState::Finishing)
+			return;
+
+		if (m_recordingState == RecordingState::Recording)
 		{
+			m_recordingState = RecordingState::Finishing;
 			m_recorder.stop();
-			m_ui->recordButton->setText("Record CSV");
+			updateRecordingControls();
 			return;
 		}
 
@@ -372,23 +404,53 @@ namespace nav::viewer
 		dialog.setDefaultSuffix("csv");
 		dialog.selectFile("RouteRecording.csv");
 		if (dialog.exec() != QDialog::Accepted)
+			return;
+
+		const auto path = std::filesystem::path(dialog.selectedFiles().constFirst().toStdU16String());
+		if (!m_recorder.start(path, [this](bool success) { Q_EMIT csvRecordingFinished(success); }))
 		{
+			finishRecording(false);
 			return;
 		}
-		if (!m_recorder.start(std::filesystem::path(dialog.selectedFiles().constFirst().toStdU16String())))
-		{
-			recordingFailed();
-			return;
-		}
-		m_ui->recordButton->setText("Stop Recording");
+		m_recordingState = RecordingState::Recording;
+		updateRecordingControls();
 	}
 
-	// Stops CSV recording and reports the write failure to the user and log.
-	void ViewerWindow::recordingFailed()
+	void ViewerWindow::updateRecordingControls()
 	{
-		nav::logger::error("Could not write to the selected CSV file.");
-		m_recorder.stop();
-		m_ui->recordButton->setText("Record CSV");
-		QMessageBox::warning(this, "CSV recording failed", "Could not write to the selected CSV file.");
+		const auto state = m_session.state();
+		const bool driving = state == State::Running || state == State::Paused;
+		switch (m_recordingState)
+		{
+		case RecordingState::Idle:
+			m_ui->recordButton->setText("Record CSV");
+			m_ui->recordButton->setEnabled(driving);
+			break;
+		case RecordingState::Recording:
+			m_ui->recordButton->setText("Stop Recording");
+			m_ui->recordButton->setEnabled(true);
+			break;
+		case RecordingState::Finishing:
+			m_ui->recordButton->setText("Finishing Recording…");
+			m_ui->recordButton->setEnabled(false);
+			break;
+		}
+	}
+
+	void ViewerWindow::finishRecording(bool success)
+	{
+		m_recorder.join();
+		m_recordingState = RecordingState::Idle;
+		updateRecordingControls();
+		if (!success)
+			nav::logger::error("CSV recording failed. The file may be incomplete.");
+
+		if (m_closeAfterRecording)
+		{
+			close();
+			return;
+		}
+		if (!success)
+			QMessageBox::warning(this, "CSV recording failed", "The file could not be completed.");
 	}
 }    // namespace nav::viewer

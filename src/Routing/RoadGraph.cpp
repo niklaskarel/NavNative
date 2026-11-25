@@ -30,7 +30,7 @@ namespace nav::routing
 	}
 
 	// Finds the graph node closest to a point picked in the viewer.
-	RoadGraph::NodeId RoadGraph::nearestNode(nav::geometry::Point point) const
+	nav::routing::NodeId RoadGraph::nearestNode(nav::geometry::Point point) const
 	{
 		return std::min_element(m_nodes.begin(),
 								m_nodes.end(),

@@ -52,32 +52,42 @@ namespace nav::session
 		return true;
 	}
 
-	// Snaps a click to the road graph and starts planning after both endpoints are selected.
-	bool RouteSession::pickPoint(nav::geometry::Point point, PlanHandler completed)
+	bool RouteSession::pickPoint(nav::geometry::Point point)
 	{
 		if (m_state != State::SettingRoute)
 			return false;
 		const auto node = m_graph.nearestNode(point);
-		if (!m_start)
-		{
-			m_start = node;
-			return true;
-		}
-		if (m_start == node)
-		{
-			nav::logger::warning("Start and destination are the same. Destination point discarded.");
+		if (!m_waypoints.nodeIds.empty() && m_waypoints.nodeIds.back() == node)
 			return false;
+
+		const auto position = m_graph.position(node);
+		m_waypoints.nodeIds.push_back(node);
+		try
+		{
+			m_waypoints.positions.push_back(position);
 		}
-		m_destination = node;
+		catch (...)
+		{
+			m_waypoints.nodeIds.pop_back();
+			throw;
+		}
+		return true;
+	}
+
+	bool RouteSession::finishWaypoints(PlanHandler completed)
+	{
+		if (m_state != State::SettingRoute || m_waypoints.nodeIds.size() < 2 || !completed)
+			return false;
+
 		transition(State::Calculating);
 		try
 		{
 			m_calculation = std::jthread(
-				[this, from = *m_start, to = *m_destination, completed = std::move(completed)](std::stop_token stop) {
+				[this, stops = m_waypoints.nodeIds, completed = std::move(completed)](std::stop_token stop) {
 					PlanResult result;
 					try
 					{
-						result.options = nav::routing::RoutePlanner(m_graph).routeOptions(from, to, stop);
+						result.options = nav::routing::RoutePlanner(m_graph).routeOptions(stops, stop);
 					}
 					catch (const std::exception& error)
 					{
@@ -116,7 +126,7 @@ namespace nav::session
 	// Clears both markers and the old route choices before refreshing the setup view.
 	bool RouteSession::clearEndpoints()
 	{
-		if ((m_state != State::SettingRoute && m_state != State::ChoosingRoute) || (!m_start && !m_destination))
+		if ((m_state != State::SettingRoute && m_state != State::ChoosingRoute) || m_waypoints.nodeIds.empty())
 			return false;
 		clearPlan();
 		transition(State::SettingRoute);
@@ -134,9 +144,8 @@ namespace nav::session
 		m_selected = 0;
 		if (m_options.empty())
 		{
-			m_destination.reset();
 			if (!result.failed)
-				nav::logger::warning("No drivable route between the selected endpoints. Choose another destination.");
+				nav::logger::warning("The selected waypoints could not be connected. Right-click to clear them and try again.");
 			transition(State::SettingRoute);
 			return;
 		}
@@ -340,16 +349,9 @@ namespace nav::session
 		return m_selected;
 	}
 
-	// Returns the selected start coordinates for the map marker.
-	std::optional<nav::geometry::Point> RouteSession::startPoint() const
+	const nav::routing::Waypoint& RouteSession::waypoints() const
 	{
-		return m_start ? std::optional(m_graph.position(*m_start)) : std::nullopt;
-	}
-
-	// Returns the selected destination coordinates for the map marker.
-	std::optional<nav::geometry::Point> RouteSession::destinationPoint() const
-	{
-		return m_destination ? std::optional(m_graph.position(*m_destination)) : std::nullopt;
+		return m_waypoints;
 	}
 
 	// Changes the session state and notifies the registered UI callback.
@@ -363,8 +365,7 @@ namespace nav::session
 	// Clears route endpoints, alternatives, selection, and route status.
 	void RouteSession::clearPlan()
 	{
-		m_start.reset();
-		m_destination.reset();
+		m_waypoints = {};
 		m_options.clear();
 		m_selected = 0;
 	}
