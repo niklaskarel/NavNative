@@ -2,3 +2,5 @@
 /.vs/
 /CMakeUserPresets.json
 *.user
+/docs/AsyncCsvRecording.md
+/AGENTS.md
