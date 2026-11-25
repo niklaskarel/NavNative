@@ -3,4 +3,5 @@
 /CMakeUserPresets.json
 *.user
 /docs/AsyncCsvRecording.md
+/docs/Decisions.md
 /AGENTS.md
