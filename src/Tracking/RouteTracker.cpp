@@ -16,6 +16,7 @@ namespace nav::tracking
 		constexpr double MaxSpeedMetersPerSecond = 35;
 		constexpr double ProgressToleranceMeters = 10;
 		constexpr auto ReacquireAfter = std::chrono::seconds(2);
+		constexpr auto MaxPredictionTime = std::chrono::seconds(5);
 	}
 
 	// Stores the route and prepares the cumulative distances used for matching and interpolation.
@@ -90,10 +91,26 @@ namespace nav::tracking
 		m_lastFixTime = fix.timestamp;
 		if (!match->offRoute)
 		{
+			m_prediction.reset();
 			m_lastMatchTime = fix.timestamp;
 			m_lastProgress = match->progressMeters;
 		}
 		return match;
+	}
+
+	std::optional<double> RouteTracker::predictProgress(std::chrono::steady_clock::time_point timestamp, double speed)
+	{
+		if (!m_lastMatchTime || !std::isfinite(speed) || timestamp - *m_lastMatchTime > MaxPredictionTime)
+			return std::nullopt;
+
+		const auto previous = m_prediction.value_or(Prediction{*m_lastMatchTime, m_lastProgress});
+		if (timestamp < previous.timestamp)
+			return std::nullopt;
+
+		const double seconds = std::chrono::duration<double>(timestamp - previous.timestamp).count();
+		const double progress = std::clamp(previous.progressMeters + speed * seconds, 0.0, lengthMeters());
+		m_prediction = Prediction{timestamp, progress};
+		return progress;
 	}
 
 	// Clears timing history so the next fix can search the full route.
@@ -101,6 +118,7 @@ namespace nav::tracking
 	{
 		m_lastFixTime.reset();
 		m_lastMatchTime.reset();
+		m_prediction.reset();
 	}
 
 	// Finds the nearest route position inside the allowed progress window.

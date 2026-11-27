@@ -15,10 +15,12 @@ namespace nav::simulation
 		explicit DriveSimulation(nav::geometry::SharedRoute route);
 		/// Advances along the route and returns false once the destination is reached.
 		bool advance(double distanceMeters);
+		/// Returns the distance left on the simulated route.
+		double remainingMeters() const { return m_routeGeometry.lengthMeters() - m_progressMeters; }
 		/// Returns the vehicle to the route start and reseeds the deterministic noise generator.
 		void reset();
-		/// Returns ground truth and a simulated GPS position with configurable noise and offset.
-		DriveSample sample(double noiseMeters, double northOffsetMeters);
+		/// Returns ground truth and a simulated GPS position with configurable noise.
+		DriveSample sample(double noiseMeters);
 
 	private:
 		nav::tracking::RouteTracker m_routeGeometry;    // Provides route length and interpolation for simulated motion.

@@ -2,6 +2,9 @@
 
 #include "nav/Geometry/RouteGeometry.h"
 
+#include <QCheckBox>
+#include <QHBoxLayout>
+#include <QLabel>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
@@ -39,7 +42,7 @@ namespace nav::viewer
 		constexpr int MatchLineWidth = 1;
 		constexpr double ObservationRadius = 1.5;
 		constexpr int LegendX = 15;
-		constexpr int LegendY = 25;
+		constexpr int LegendY = 8;
 	}
 
 	// Stores the map and calculates bounds used to fit it in the widget.
@@ -47,6 +50,28 @@ namespace nav::viewer
 		: m_streetMap(std::move(map))
 	{
 		setMinimumSize(MinimumMapWidth, MinimumMapHeight);
+		auto* overlayBar = new QWidget(this);
+		auto* controls = new QHBoxLayout(overlayBar);
+		controls->setContentsMargins(0, 0, 0, 0);
+		const auto addOverlay = [&](const QString& text, const QString& color, Overlay overlay) {
+			auto* checkbox = new QCheckBox(text, overlayBar);
+			checkbox->setStyleSheet(QStringLiteral("color: %1;").arg(color));
+			checkbox->setChecked(isOverlayVisible(overlay));
+			connect(checkbox, &QCheckBox::toggled, this, [this, overlay](bool visible) {
+				setOverlayVisible(overlay, visible);
+			});
+			controls->addWidget(checkbox);
+		};
+		addOverlay(QStringLiteral("● True position"), QStringLiteral("#34d399"), Overlay::TruePosition);
+		addOverlay(QStringLiteral("● GPS position"), QStringLiteral("#fbbf24"), Overlay::GpsPosition);
+		addOverlay(QStringLiteral("● Route match"), QStringLiteral("#60a5fa"), Overlay::RouteMatch);
+
+		auto* arrowLegend = new QLabel(QStringLiteral("Arrows: one-way streets"), overlayBar);
+		arrowLegend->setStyleSheet(QStringLiteral("color: white;"));
+		controls->addWidget(arrowLegend);
+		overlayBar->adjustSize();
+		overlayBar->move(LegendX, LegendY);
+
 		const double infinity = std::numeric_limits<double>::infinity();
 		nav::geometry::Point low{infinity, infinity};
 		nav::geometry::Point high{-infinity, -infinity};
@@ -63,14 +88,34 @@ namespace nav::viewer
 		m_mapBounds = QRectF(QPointF(low.x, low.y), QPointF(high.x, high.y));
 	}
 
-	// Updates the displayed positions and GPS trail when a matched frame arrives.
-	void MapCanvas::setFrame(nav::geometry::Point truth, nav::geometry::Point gps, const nav::tracking::Match& match)
+	void MapCanvas::setOverlayVisible(Overlay overlay, bool visible)
 	{
-		m_truth = truth;
-		m_gps = gps;
-		m_match = match;
+		m_visibleOverlays.set(static_cast<std::size_t>(overlay), visible);
+		update();
+	}
+
+	bool MapCanvas::isOverlayVisible(Overlay overlay) const
+	{
+		return m_visibleOverlays.test(static_cast<std::size_t>(overlay));
+	}
+
+	// Updates the displayed positions and GPS trail when a matched frame arrives.
+	void MapCanvas::setFrame(const nav::session::DriveFrame& frame)
+	{
+		m_truth = frame.truth;
+		m_gps = frame.gps;
+		m_estimate.reset();
+		m_isPrediction = frame.prediction.has_value();
+		if (frame.match && !frame.match->offRoute)
+			m_lastGpsProgress = frame.match->progressMeters;
+		m_predictedProgress = frame.prediction ? std::optional{frame.prediction->progressMeters} : std::nullopt;
+		if (frame.prediction)
+			m_estimate = frame.prediction->position;
+		else if (frame.match)
+			m_estimate = frame.match->position;
 		m_hasFrame = true;
-		m_observations.push_back(gps);
+		if (m_gps)
+			m_observations.push_back(*m_gps);
 		if (m_observations.size() > ObservationLimit)
 		{
 			m_observations.erase(m_observations.begin());
@@ -133,6 +178,8 @@ namespace nav::viewer
 	void MapCanvas::clearFrame()
 	{
 		m_hasFrame = false;
+		m_lastGpsProgress.reset();
+		m_predictedProgress.reset();
 		clearObservations();
 		update();
 	}
@@ -278,6 +325,38 @@ namespace nav::viewer
 			drawRoute(1 - m_selected);
 		drawRoute(m_selected);
 
+		const auto& route = m_routes[m_selected];
+		if (isOverlayVisible(Overlay::RouteMatch) && route && m_lastGpsProgress && m_predictedProgress
+			&& *m_predictedProgress > *m_lastGpsProgress)
+		{
+			QPainterPath predictedPath;
+			double segmentStart = 0.0;
+			for (std::size_t i = 1; i < route->size(); ++i)
+			{
+				const auto from = (*route)[i - 1];
+				const auto to = (*route)[i];
+				const double length = nav::geometry::distance(from, to);
+				const double segmentEnd = segmentStart + length;
+				const double begin = std::max(segmentStart, *m_lastGpsProgress);
+				const double end = std::min(segmentEnd, *m_predictedProgress);
+				if (begin < end)
+				{
+					const auto pointAtDistance = [&](double progress) {
+						const double fraction = (progress - segmentStart) / length;
+						return screen({std::lerp(from.x, to.x, fraction), std::lerp(from.y, to.y, fraction)});
+					};
+					if (predictedPath.isEmpty())
+						predictedPath.moveTo(pointAtDistance(begin));
+					predictedPath.lineTo(pointAtDistance(end));
+				}
+				if (segmentEnd >= *m_predictedProgress)
+					break;
+				segmentStart = segmentEnd;
+			}
+			p.strokePath(predictedPath,
+						 QPen(QColor("#fb923c"), SelectedRouteWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+		}
+
 		if (m_directionViewport != size())
 			rebuildDirectionOverlay(scale, origin);
 		p.strokePath(m_directionOverlay,
@@ -291,25 +370,34 @@ namespace nav::viewer
 			p.setBrush(QColor(destination ? "#d58df1" : (i == 0 ? "#e5e7eb" : "#7dd3fc")));
 			p.drawEllipse(screen(m_waypointMarkers[i]), MarkerRadius, MarkerRadius);
 		}
-		p.setBrush(Qt::NoBrush);
-		p.setPen(QPen(QColor("#fbbf24"), ObservationPenWidth));
-		for (auto point : m_observations)
-			p.drawEllipse(screen(point), ObservationRadius, ObservationRadius);
+		const bool showGps = isOverlayVisible(Overlay::GpsPosition);
+		const bool showMatch = isOverlayVisible(Overlay::RouteMatch);
+		if (showGps)
+		{
+			p.setBrush(Qt::NoBrush);
+			p.setPen(QPen(QColor("#fbbf24"), ObservationPenWidth));
+			for (const auto point : m_observations)
+				p.drawEllipse(screen(point), ObservationRadius, ObservationRadius);
+		}
 		if (m_hasFrame)
 		{
-			p.setPen(QPen(QColor("#f87171"), MatchLineWidth));
-			p.drawLine(screen(m_gps), screen(m_match.position));
+			if (showGps && showMatch && m_gps && m_estimate && !m_isPrediction)
+			{
+				p.setPen(QPen(QColor("#f87171"), MatchLineWidth));
+				p.drawLine(screen(*m_gps), screen(*m_estimate));
+			}
 			// Draws one colored position marker at its mapped screen coordinates.
 			auto dot = [&](nav::geometry::Point point, QColor color) {
 				p.setBrush(color);
 				p.setPen(Qt::NoPen);
 				p.drawEllipse(screen(point), MarkerRadius, MarkerRadius);
 			};
-			dot(m_truth, QColor("#34d399"));
-			dot(m_gps, QColor("#fbbf24"));
-			dot(m_match.position, QColor("#60a5fa"));
+			if (isOverlayVisible(Overlay::TruePosition))
+				dot(m_truth, QColor("#34d399"));
+			if (showGps && m_gps)
+				dot(*m_gps, QColor("#fbbf24"));
+			if (showMatch && m_estimate)
+				dot(*m_estimate, QColor(m_isPrediction ? "#fb923c" : "#60a5fa"));
 		}
-		p.setPen(Qt::white);
-		p.drawText(LegendX, LegendY, "Green: true position    Yellow: GPS    Blue: route match    Arrows: one-way streets");
 	}
 }    // namespace nav::viewer

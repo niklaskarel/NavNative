@@ -26,8 +26,7 @@ namespace nav::simulation
 		void setSpeed(int metersPerSecond);
 		/// Updates the noise amplitude used for simulated GPS fixes.
 		void setNoise(int meters);
-		/// Controls the northward GPS offset used in the simulation.
-		void setOffset(bool enabled);
+		void setGpsOutage(bool enabled);
 
 	private:
 		/// Paces the producer at 10 Hz and publishes timestamped receiver packets.
@@ -37,7 +36,7 @@ namespace nav::simulation
 		routing::LocalProjection m_projection;    // Converts local simulated positions to geographic coordinates for NMEA.
 		std::atomic<int> m_speed = 12;            // Atomic speed setting read by the acquisition thread in meters per second.
 		std::atomic<int> m_noise = 8;             // Atomic GPS noise setting read by acquisition in meters.
-		std::atomic<bool> m_offsetEnabled = false;    // Atomic switch for the simulated northward GPS bias.
+		std::atomic<bool> m_gpsOutageEnabled = false;
 		std::jthread m_thread;                        // Runs the timed receiver simulation and publishes packets.
 	};
 }    // namespace nav::simulation

@@ -31,13 +31,13 @@ namespace nav::simulation
 		m_random.seed(NoiseSeed);
 	}
 
-	// Returns ground truth and a simulated GPS position with configurable noise and offset.
-	DriveSample DriveSimulation::sample(double noiseMeters, double northOffsetMeters)
+	// Returns ground truth and a simulated GPS position with configurable noise.
+	DriveSample DriveSimulation::sample(double noiseMeters)
 	{
 		const auto truth = m_routeGeometry.pointAt(m_progressMeters);
 		std::normal_distribution<double> noise(0, 1);
 		const nav::geometry::Point gps{truth.x + noiseMeters * noise(m_random),
-									   truth.y + noiseMeters * noise(m_random) + northOffsetMeters};
+									   truth.y + noiseMeters * noise(m_random)};
 		return {
 			.progressMeters = m_progressMeters,
 			.truth = truth,

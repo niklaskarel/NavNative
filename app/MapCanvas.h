@@ -7,6 +7,7 @@
 #include <QWidget>
 
 #include <array>
+#include <bitset>
 #include <functional>
 #include <optional>
 #include <vector>
@@ -17,11 +18,14 @@ namespace nav::viewer
 	class MapCanvas : public QWidget
 	{
 	public:
+		enum class Overlay { TruePosition, GpsPosition, RouteMatch, Count };
+		void setOverlayVisible(Overlay overlay, bool visible);
+
 		/// Stores the map and calculates bounds used to fit it in the widget.
 		explicit MapCanvas(nav::routing::StreetMap map);
 
 		/// Updates the displayed positions and GPS trail when a matched frame arrives.
-		void setFrame(nav::geometry::Point truth, nav::geometry::Point gps, const nav::tracking::Match& match);
+		void setFrame(const nav::session::DriveFrame& frame);
 		/// Clears the GPS trail when resetting the displayed drive.
 		void clearObservations();
 		/// Updates the active and alternate paths used by the preview and map selection.
@@ -47,6 +51,10 @@ namespace nav::viewer
 		void mousePressEvent(QMouseEvent* event) override;
 
 	private:
+		static constexpr auto OverlayCount = static_cast<std::size_t>(Overlay::Count);
+		std::bitset<OverlayCount> m_visibleOverlays{0b111};
+		bool isOverlayVisible(Overlay overlay) const;
+
 		/// Calculates the pixels per meter needed to fit the map in the widget.
 		double mapScale() const;
 		/// Computes the screen translation that centers the map at the given scale.
@@ -61,8 +69,11 @@ namespace nav::viewer
 		QRectF m_mapBounds;                                         // World-coordinate bounds used to scale and center the map.
 		bool m_hasFrame = false;                                    // Controls whether the latest vehicle markers are drawn.
 		nav::geometry::Point m_truth{};                             // Latest ground-truth position drawn in green.
-		nav::geometry::Point m_gps{};                               // Latest simulated GPS position drawn in yellow.
-		nav::tracking::Match m_match{};                             // Latest tracker estimate drawn in blue.
+		std::optional<nav::geometry::Point> m_gps;                 // Latest GPS position, when available.
+		std::optional<nav::geometry::Point> m_estimate;            // Latest matched or predicted position.
+		bool m_isPrediction = false;                               // Selects the dead-reckoning marker color.
+		std::optional<double> m_lastGpsProgress;
+		std::optional<double> m_predictedProgress;
 		std::vector<nav::geometry::Point> m_observations;           // Recent GPS readings used to draw the observation trail.
 		std::vector<nav::geometry::Point> m_waypointMarkers;      // Snapped stops in click order.
 		bool m_waypointsConfirmed = false;                         // Applies the destination style to the last stop.

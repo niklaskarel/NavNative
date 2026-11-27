@@ -46,24 +46,36 @@ namespace nav::session
 	void TrackingWorker::process(std::stop_token stopToken, const FrameHandler& handler)
 	{
 		m_positionLogger.reset();
-		std::optional<std::chrono::sys_time<std::chrono::milliseconds>> firstFixTime;
+		std::optional<std::chrono::sys_time<std::chrono::milliseconds>> firstSampleTime;
 		const auto clockOrigin = std::chrono::steady_clock::now();
 		while (auto packet = m_queue.waitAndPop(stopToken))
 		{
-			if (const auto decoded = nav::gnss::parseRmc(packet->sentence))
+			if (!firstSampleTime)
+				firstSampleTime = packet->timestamp;
+
+			DriveFrame frame{};
+			frame.progressMeters = packet->sample.progressMeters;
+			frame.truth = packet->sample.truth;
+			frame.arrived = packet->arrived;
+			if (!packet->sentence)
 			{
-				if (!firstFixTime)
-					firstFixTime = decoded->measuredAt;
-				packet->sample.gps = m_projection.project(decoded->degrees);
-				const tracking::GpsFix fix{packet->sample.gps, clockOrigin + (decoded->measuredAt - *firstFixTime)};
-				if (auto match = m_tracker.track(fix))
-				{
-					m_positionLogger.log(packet->sample.truth);
-					handler(DriveFrame{std::move(packet->sample), *match, packet->arrived});
-				}
+				const auto timestamp = clockOrigin + (packet->timestamp - *firstSampleTime);
+				if (const auto progress = m_tracker.predictProgress(timestamp, packet->simulatedSpeed))
+					frame.prediction = RoutePrediction{m_tracker.pointAt(*progress), *progress};
+			}
+			else if (const auto decoded = nav::gnss::parseRmc(*packet->sentence))
+			{
+				frame.gps = m_projection.project(decoded->degrees);
+				const auto timestamp = clockOrigin + (decoded->measuredAt - *firstSampleTime);
+				frame.match = m_tracker.track({*frame.gps, timestamp});
 			}
 			else
 				nav::logger::warning("Invalid NMEA RMC sentence discarded");
+			if (!packet->sentence || frame.match || frame.arrived)
+			{
+				m_positionLogger.log(frame.truth);
+				handler(std::move(frame));
+			}
 			m_queue.complete();
 		}
 	}

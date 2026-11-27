@@ -38,3 +38,16 @@ progress:
       - The Windows Debug build and CTest passed.
       - The waypoint test verified explicit confirmation, routing through an intermediate stop, and clearing during selection and preview.
       - The CSV smoke test verified background completion, recovery after an invalid path, and writing all 12 queued rows in order.
+  - date: "2026-11-27"
+    summary: Added simulated dead reckoning and map overlay controls.
+    changes:
+      - Add default-on checkboxes inside the map for the true position, GPS position and trail, and route match.
+      - Simulate repeated GPS outages with randomized start times and durations. Shorten or skip gaps near the destination to leave room for GPS recovery.
+      - Predict progress from the last accepted GPS match using the simulated speed on each update. Stop predicting after five seconds without an accepted fix.
+      - Draw an orange marker and highlight the forward-predicted stretch of the selected route during an outage. Clear the highlight when GPS matching resumes.
+      - Record the estimate source in CSV and leave the GPS fields blank during an outage.
+      - Automatically stop and reset the drive when the vehicle reaches the destination.
+      - Remove the 60 m GPS offset control and the fixed northward bias from the simulator.
+    verification:
+      - The Windows Debug build succeeded and all 25 tests passed.
+      - Dead-reckoning tests cover prediction through a bend, expiry, GPS recovery, and speed changes after a backward GPS jump.

@@ -3,6 +3,7 @@
 #include <chrono>
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -56,7 +57,7 @@ namespace nav
 		struct DriveSample
 		{
 			double progressMeters;         // Distance along the route from its start, measured in meters.
-			nav::geometry::Point truth;    // Simulated vehicle position before GPS noise and offset are applied.
+			nav::geometry::Point truth;    // Simulated vehicle position before GPS noise is applied.
 			nav::geometry::Point gps;      // Simulated receiver reading in local meters.
 		};
 
@@ -64,18 +65,30 @@ namespace nav
 		struct GnssPacket
 		{
 			DriveSample sample;      // Ground-truth and GPS metadata paired with the receiver sentence.
-			std::string sentence;    // Encoded NMEA RMC line passed to the tracking worker.
+			std::optional<std::string> sentence;    // Absent during a simulated GPS outage.
 			bool arrived;            // Whether this frame or packet reached the destination.
+			std::chrono::sys_time<std::chrono::milliseconds> timestamp{};
+			double simulatedSpeed = 0;    // Signed motion input in meters per second for dead reckoning.
 		};
 	}    // namespace simulation
 
 	namespace session
 	{
-		/// A simulated reading and its corresponding route match.
-		struct DriveFrame : simulation::DriveSample
+		struct RoutePrediction
 		{
-			tracking::Match match;    // Route estimate paired with the simulated sample.
-			bool arrived = false;     // Whether this frame or packet reached the destination.
+			geometry::Point position;
+			double progressMeters;
+		};
+
+		/// Simulation truth and the available GPS or predicted route estimate.
+		struct DriveFrame
+		{
+			double progressMeters = 0;
+			geometry::Point truth;
+			std::optional<geometry::Point> gps;
+			std::optional<tracking::Match> match;
+			std::optional<RoutePrediction> prediction;
+			bool arrived = false;
 		};
 	}    // namespace session
 
@@ -94,7 +107,7 @@ namespace nav
 		struct Waypoint
 		{
 			std::vector<NodeId> nodeIds;
-			std::vector < geometry::Point> positions;
+			std::vector<geometry::Point> positions;
 		};
 
 		struct StreetMap

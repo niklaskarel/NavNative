@@ -175,9 +175,9 @@
             </widget>
           </item>
           <item>
-            <widget class="QCheckBox" name="offset">
+            <widget class="QCheckBox" name="gpsOutage">
               <property name="text">
-                <string>60 m GPS offset</string>
+                <string>Simulate dead reckoning</string>
               </property>
             </widget>
           </item>

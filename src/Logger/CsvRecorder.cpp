@@ -123,7 +123,7 @@ namespace nav::logger
 		file.imbue(std::locale::classic());
 		file << std::setprecision(CsvPrecision)
 			 << "elapsed_ms,truth_x_m,truth_y_m,gps_x_m,gps_y_m,match_x_m,match_y_m,"
-				"true_progress_m,estimated_progress_m,distance_from_route_m,off_route\n";
+				"true_progress_m,estimated_progress_m,distance_from_route_m,off_route,estimate_source\n";
 
 		while (file)
 		{
@@ -138,10 +138,21 @@ namespace nav::logger
 
 			const auto& frame = row.frame;
 			const auto& match = frame.match;
-			file << row.elapsed.count() << ',' << frame.truth.x << ',' << frame.truth.y << ','
-				 << frame.gps.x << ',' << frame.gps.y << ',' << match.position.x << ',' << match.position.y
-				 << ',' << frame.progressMeters << ',' << match.progressMeters << ',' << match.distanceFromRouteMeters
-				 << ',' << (match.offRoute ? 1 : 0) << '\n';
+			file << row.elapsed.count() << ',' << frame.truth.x << ',' << frame.truth.y << ',';
+			if (frame.gps)
+				file << frame.gps->x << ',' << frame.gps->y;
+			else
+				file << ',';
+			file << ',';
+			if (match)
+				file << match->position.x << ',' << match->position.y << ',' << frame.progressMeters << ','
+					 << match->progressMeters << ',' << match->distanceFromRouteMeters << ',' << (match->offRoute ? 1 : 0)
+					 << ",gps\n";
+			else if (frame.prediction)
+				file << frame.prediction->position.x << ',' << frame.prediction->position.y << ',' << frame.progressMeters
+					 << ',' << frame.prediction->progressMeters << ",,,predicted\n";
+			else
+				file << ",," << frame.progressMeters << ",,,,unavailable\n";
 		}
 
 		file.flush();

@@ -148,7 +148,7 @@ namespace nav::viewer
 			m_session.setSpeed(value);
 			m_ui->speedLabel->setText(QString("Speed: %1 m/s").arg(value));
 		});
-		connect(m_ui->offset, &QCheckBox::toggled, this, [this](bool enabled) { m_session.setOffset(enabled); });
+		connect(m_ui->gpsOutage, &QCheckBox::toggled, this, [this](bool enabled) { m_session.setGpsOutage(enabled); });
 		m_canvas->setPickHandler([this](nav::geometry::Point point) { pickRoutePoint(point); });
 		m_canvas->setClearEndpointsHandler([this] { return m_session.clearEndpoints(); });
 		m_session.setStateHandler([this](State) { updateControls(); });
@@ -203,7 +203,7 @@ namespace nav::viewer
 			if (static_cast<ControlEvent*>(event)->data == AfterControl::Reset)
 				resetDrive();
 			else if (m_session.state() == State::Paused && m_arrived)
-				stopDrive();
+				stopDrive(true);
 			return true;
 		}
 		return QWidget::event(event);
@@ -356,19 +356,32 @@ namespace nav::viewer
 	// Updates the map, status, and logging sinks from one matched drive frame.
 	void ViewerWindow::displayFrame(const nav::session::DriveFrame& frame)
 	{
-		const auto& match = frame.match;
-		m_canvas->setFrame(frame.truth, frame.gps, match);
+		m_canvas->setFrame(frame);
 		m_recorder.append(frame);
-		m_ui->status->setText(QString("True progress: %1 m | Estimated: %2 m | Remaining: %3 m | Distance to route: %4 m | %5")
-								  .arg(frame.progressMeters, 0, 'f', ProgressDecimalPlaces)
-								  .arg(match.progressMeters, 0, 'f', ProgressDecimalPlaces)
-								  .arg(match.remainingMeters, 0, 'f', ProgressDecimalPlaces)
-								  .arg(match.distanceFromRouteMeters, 0, 'f', ProgressDecimalPlaces)
-								  .arg(frame.arrived ? "ARRIVED" : (match.offRoute ? "OFF ROUTE" : "ON ROUTE")));
+		if (const auto& match = frame.match)
+		{
+			m_ui->status->setText(QString("True progress: %1 m | Estimated: %2 m | Remaining: %3 m | Distance to route: %4 m | %5")
+									  .arg(frame.progressMeters, 0, 'f', ProgressDecimalPlaces)
+									  .arg(match->progressMeters, 0, 'f', ProgressDecimalPlaces)
+									  .arg(match->remainingMeters, 0, 'f', ProgressDecimalPlaces)
+									  .arg(match->distanceFromRouteMeters, 0, 'f', ProgressDecimalPlaces)
+									  .arg(frame.arrived ? "ARRIVED" : (match->offRoute ? "OFF ROUTE" : "ON ROUTE")));
+		}
+		else if (frame.prediction)
+		{
+			m_ui->status->setText(QString("True progress: %1 m | Estimated: %2 m | %3")
+									  .arg(frame.progressMeters, 0, 'f', ProgressDecimalPlaces)
+									  .arg(frame.prediction->progressMeters, 0, 'f', ProgressDecimalPlaces)
+									  .arg(frame.arrived ? "ARRIVED" : "DEAD RECKONING"));
+		}
+		else
+		{
+			m_ui->status->setText(frame.arrived ? "ARRIVED" : "GPS unavailable | No position estimate");
+		}
 		if (frame.arrived)
 		{
 			m_arrived = true;
-			stopDrive();
+			stopDrive(true);
 		}
 	}
 

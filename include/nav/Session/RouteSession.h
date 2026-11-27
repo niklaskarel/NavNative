@@ -72,8 +72,7 @@ namespace nav::session
 		void setSpeed(int metersPerSecond);
 		/// Updates the noise amplitude used for simulated GPS fixes.
 		void setNoise(int meters);
-		/// Controls the northward GPS offset used in the simulation.
-		void setOffset(bool enabled);
+		void setGpsOutage(bool enabled);
 
 		/// Returns the current drive state for UI control and status updates.
 		State state() const;
@@ -105,7 +104,7 @@ namespace nav::session
 		std::size_t m_selected = 0;                 // Index of the candidate used for preview and drive startup.
 		int m_speed = 12;                           // Selected speed retained across drives and forwarded to acquisition.
 		int m_noise = 8;                            // Selected GPS noise retained across drives and forwarded to acquisition.
-		bool m_offset = false;                      // Selected GPS offset setting retained across drives.
+		bool m_gpsOutage = false;
 		std::unique_ptr<ProtectedQueue> m_queue;    // Session-owned handoff shared by both drive workers.
 		logger::PositionLogger m_positionLogger;  // Retains one logger across all drives in this session.
 		std::unique_ptr<simulation::SimulatedGnssSource>

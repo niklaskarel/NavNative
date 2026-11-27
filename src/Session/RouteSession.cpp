@@ -182,7 +182,7 @@ namespace nav::session
 			m_worker = std::make_unique<TrackingWorker>(route, m_originDegrees, *m_queue, m_positionLogger);
 			m_source->setSpeed(m_speed);
 			m_source->setNoise(m_noise);
-			m_source->setOffset(m_offset);
+			m_source->setGpsOutage(m_gpsOutage);
 			m_worker->start(std::move(handler));
 			m_source->start([queue = m_queue.get()](std::stop_token token) { return queue->waitToProduce(token); },
 							[queue = m_queue.get()](simulation::GnssPacket&& packet) { queue->push(std::move(packet)); },
@@ -317,12 +317,11 @@ namespace nav::session
 			m_source->setNoise(m_noise);
 	}
 
-	// Controls the northward GPS offset used in the simulation.
-	void RouteSession::setOffset(bool enabled)
+	void RouteSession::setGpsOutage(bool enabled)
 	{
-		m_offset = enabled;
-		if (m_state != State::Stopping && m_source)
-			m_source->setOffset(m_offset);
+		m_gpsOutage = enabled;
+		if (m_source)
+			m_source->setGpsOutage(enabled);
 	}
 
 	// Returns the current drive state for UI control and status updates.

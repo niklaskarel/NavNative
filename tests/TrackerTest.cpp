@@ -82,6 +82,50 @@ namespace
 		EXPECT_DOUBLE_EQ(tracker.track({{108, 0}, start + 200ms})->progressMeters, 108);
 	}
 
+	// Verifies that the prediction follows a bend, expires, and gives way to GPS when it returns.
+	TEST(RouteTrackerDeadReckoningTest, PredictsThroughBendAndExpires)
+	{
+		nav::tracking::RouteTracker tracker({{0, 0}, {125, 0}, {125, 100}});
+		const std::chrono::steady_clock::time_point start{};
+		EXPECT_FALSE(tracker.predictProgress(start, 10));
+		ASSERT_TRUE(tracker.track({{90, 0}, start}));
+		ASSERT_TRUE(tracker.track({{100, 0}, start + 1s}));
+
+		const auto progress = tracker.predictProgress(start + 6s, 10);
+		ASSERT_TRUE(progress);
+		EXPECT_DOUBLE_EQ(*progress, 150);
+		EXPECT_DOUBLE_EQ(tracker.pointAt(*progress).x, 125);
+		EXPECT_DOUBLE_EQ(tracker.pointAt(*progress).y, 25);
+		EXPECT_FALSE(tracker.predictProgress(start + 6001ms, 10));
+
+		const auto recovered = tracker.track({{125, 20}, start + 6s});
+		ASSERT_TRUE(recovered);
+		EXPECT_DOUBLE_EQ(recovered->progressMeters, 145);
+		const auto nextPrediction = tracker.predictProgress(start + 6100ms, 10);
+		ASSERT_TRUE(nextPrediction);
+		EXPECT_DOUBLE_EQ(*nextPrediction, 146);
+	}
+
+	// Verifies that supplied speed controls direction and changes only affect future motion.
+	TEST(RouteTrackerDeadReckoningTest, IntegratesSpeedChangesDespiteBackwardGpsJitter)
+	{
+		nav::tracking::RouteTracker tracker({{0, 0}, {300, 0}});
+		const std::chrono::steady_clock::time_point start{};
+		ASSERT_TRUE(tracker.track({{100, 0}, start}));
+		ASSERT_TRUE(tracker.track({{90, 0}, start + 1s}));
+		const auto forward = tracker.predictProgress(start + 2s, 10);
+		ASSERT_TRUE(forward);
+		EXPECT_DOUBLE_EQ(*forward, 100);
+		const auto stopped = tracker.predictProgress(start + 3s, 0);
+		ASSERT_TRUE(stopped);
+		EXPECT_DOUBLE_EQ(*stopped, 100);
+		const auto reversed = tracker.predictProgress(start + 4s, -5);
+		ASSERT_TRUE(reversed);
+		EXPECT_DOUBLE_EQ(*reversed, 95);
+		tracker.resetTracking();
+		EXPECT_FALSE(tracker.predictProgress(start + 4s, -5));
+	}
+
 	// Verifies a signal gap or reset allows full-route matching again.
 	TEST(RouteTrackerContinuityTest, ReacquiresAfterGapAndClearsStateOnReset)
 	{

@@ -19,6 +19,8 @@ namespace nav::tracking
 		std::optional<Match> update(geometry::Point observation) const;
 		/// Matches a timestamped fix using a progress window derived from the previous accepted match.
 		std::optional<Match> track(const GpsFix& fix);
+		/// Advances the outage prediction using signed speed in meters per second.
+		std::optional<double> predictProgress(std::chrono::steady_clock::time_point timestamp, double speed);
 		/// Clears timing history so the next fix can search the full route.
 		void resetTracking();
 		/// Returns the cached route length used to clamp progress and compute remaining distance.
@@ -28,6 +30,12 @@ namespace nav::tracking
 		geometry::Point pointAt(double progressMeters) const;
 
 	private:
+		struct Prediction
+		{
+			std::chrono::steady_clock::time_point timestamp;
+			double progressMeters;
+		};
+
 		/// Finds the nearest route position inside the allowed progress window.
 		std::optional<Match> matchWithin(geometry::Point observation, double minProgress, double maxProgress) const;
 
@@ -38,5 +46,6 @@ namespace nav::tracking
 		std::optional<std::chrono::steady_clock::time_point>
 			m_lastMatchTime;          // Timestamp of the last on-route match for the continuity window.
 		double m_lastProgress = 0;    // Along-route position of the last accepted match.
+		std::optional<Prediction> m_prediction;
 	};
 }    // namespace nav::tracking
